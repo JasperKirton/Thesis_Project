@@ -11,10 +11,8 @@ import random
 from scipy.stats import norm
 from itertools import chain
 from itertools import zip_longest
-import matplotlib.pyplot as plt
 import csv
 import PairwiseCV as pairwiseCV
-#from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
 def sparse_to_dense(data):
@@ -387,7 +385,6 @@ class HGP(object):
         return results, max(results_dict)
 
 
-
 def opt_csv_write(context, best_hypers, best_p_hypers, best_coefs, best_H_hypers):
 
     with open('opt_results_{}_ARD.csv'.format(context), mode='w', encoding="ISO-8859-1", newline='') as res:
@@ -459,117 +456,6 @@ def csv_write(context, results): # can refactor this
         res.close()
 
 # Testing methods #
-# Cold start
-
-def cold_start(fold_N):
-    rec = fold_N
-    # incremental Y, associations included
-    X_indiv = Xpooled[recLoc[rec]:recLoc[rec + 1], :]  # select C testing x
-    Y_indiv = Ypooled[recLoc[rec]:recLoc[rec + 1], :]  # select C testing t
-
-    X_train = np.delete(Xpooled, np.arange(recLoc[rec], recLoc[rec + 1], 1), 0)  # select N-C training x
-    Y_train = np.delete(Ypooled, np.arange(recLoc[rec], recLoc[rec + 1], 1), 0)  # select N-C training y
-
-    order = 2
-    pmgp = PMGP(order, X_train, Y_train, best_hypers)
-    best_coefs, pmgp_marg = pmgp.optimise()
-    best_coefs = np.array(best_coefs)
-    pmgp_coefs = np.expand_dims(best_coefs, axis=0)
-
-    true_test = []
-    gp_test_pred = []  # allocating memory for cold start
-    bgp_test_pred = []  # allocating memory for cold start
-    pmgp_test_pred = []
-    gp_noARD_test_pred = []  # allocating memory for cold start
-    hgp_test_pred = []  # allocating memory for cold start
-    E_pred = []
-    session_ind = []
-
-    gp_loglik = []  # allocating memory for cold start
-    bgp_loglik = []  # allocating memory for cold start
-    pmgp_loglik = []
-    gp_noARD_loglik = []  # allocating memory for cold start
-    hgp_loglik = []  # allocating memory for cold start
-
-    gp_hypers = []
-    gp_noARD_hypers = []
-
-    for i in range(1, len(Y_indiv)):
-        # delete all data from pooled by the individual comparisons
-        X_train = np.delete(Xpooled, np.arange(recLoc[rec] + i, recLoc[rec + 1], 1), 0)  # select N-C training x
-        Y_train = np.delete(Ypooled, np.arange(recLoc[rec] + i, recLoc[rec + 1], 1), 0)  # select N-C training y
-
-        # print(X_train, Y_train)
-        # at first delete whole rec-1, then keep adding one
-        # print(recLoc[rec]+i, recLoc[rec+1])
-
-        pmgp = PMGP(order, X_train, Y_train, best_hypers)
-        pmgp_m = pmgp.train(best_coefs)
-
-        hgp = HGP(X_train, Y_train, best_hypers)
-        hgp_m = hgp.train(best_H_hypers)
-
-        X_train_indiv = X_indiv[:i]
-        # print(X_train_indiv)
-        Y_train_indiv = Y_indiv[:i]
-
-        bgp = BGP(X_train_indiv, Y_train_indiv)
-        bgp_m = bgp.train(best_hypers)
-
-        X_test = np.expand_dims(X_indiv[i], axis=0)
-        Y_test = np.expand_dims(Y_indiv[i], axis=0)
-
-        # print(X_test, Y_test)
-
-        gp = GP(X_train_indiv, Y_train_indiv, ard_b=True)
-        best_gp_hyps, disc = gp.optimise()
-        gp_m = gp.train(best_gp_hyps)
-        gp_hypers.append(best_gp_hyps)
-
-        gp_noARD = GP(X_train_indiv, Y_train_indiv, ard_b=False)
-        best_gp_noARD_hyps, disc = gp_noARD.optimise()
-        gp_noARD_m = gp_noARD.train(best_gp_noARD_hyps)
-        gp_noARD_hypers.append(best_gp_noARD_hyps)
-
-        # To do: append predictions
-        # gp_test_pred.append(mu)
-        # mu, var = gp_m.predict(X_test)
-        # gp_loglik.append(norm.pdf(Y_test, mu, var))
-
-        true_test.append(Y_test)
-
-        mu, var = gp_m.predict(X_test)
-        for i in range(0, len(Y_test)):
-            gp_loglik.append(np.log(norm.pdf(Y_test[i], mu[i], np.sqrt(var[i]))))
-        gp_test_pred.append(mu.flatten())
-
-        mu, var = bgp_m.predict(X_test)
-        for i in range(0, len(Y_test)):
-            bgp_loglik.append(np.log(norm.pdf(Y_test[i], mu[i], np.sqrt(var[i]))))
-        bgp_test_pred.append(mu.flatten())
-
-        mu, var = hgp_m.predict(X_test)
-        for i in range(0, len(Y_test)):
-            hgp_loglik.append(np.log(norm.pdf(Y_test[i], mu[i], np.sqrt(var[i]))))
-        hgp_test_pred.append(mu.flatten())
-
-        mu, var = gp_noARD_m.predict(X_test)
-        for i in range(0, len(Y_test)):
-            gp_noARD_loglik.append(np.log(norm.pdf(Y_test[i], mu[i], np.sqrt(var[i]))))
-        gp_noARD_test_pred.append(mu.flatten())
-
-        mu, var = pmgp_m.predict(X_test)
-        for i in range(0, len(Y_test)):
-            pmgp_loglik.append(np.log(norm.pdf(Y_test[i], mu[i], np.sqrt(var[i]))))
-        pmgp_test_pred.append(mu.flatten())
-
-        # pred E(Y_f)
-        E_pred.append(np.mean(Y_train_indiv))
-
-        session_ind.append(fold_N)
-
-    return (gp_test_pred, gp_noARD_test_pred, pmgp_test_pred, hgp_test_pred, bgp_test_pred, true_test, session_ind, gp_hypers,
-    gp_noARD_hypers, E_pred, gp_loglik, bgp_loglik, pmgp_loglik, gp_noARD_loglik, hgp_loglik)
 
 def LOO_Pair_CV(fold_N):  # if parallel, remove the for loop
     bgp = BGP(Xpooled, Ypooled)
@@ -803,9 +689,8 @@ def log_result(result):
 
 # Main code #
 # Data preparation #
-context = 'largeHall'
+context = 'restaurant'
 df = initialise_new(context)
-
 
 if len(df) > 100:
     num_recs = 100
